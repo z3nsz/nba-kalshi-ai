@@ -10,8 +10,9 @@ compares them with Kalshi prediction-market prices to look for potential mispric
 **Phase 1 — NBA Data Collection & Feature Engineering** (in progress)
 
 - [x] Step 1.1: Project structure
-- [ ] Step 1.2: Virtual environment
-- [ ] Step 1.3: Dependencies
+- [x] Step 1.2: Virtual environment
+- [x] Step 1.3: Dependencies
+- [ ] Step 1.4: Test the NBA API
 
 ## Folder Structure
 
@@ -23,8 +24,20 @@ nba-kalshi-ai/
 ├── src/              # Reusable Python modules (collection, cleaning, features)
 ├── notebooks/        # Jupyter notebooks for exploratory analysis
 ├── tests/            # pytest data-validation tests
-├── requirements.txt  # Python dependencies (added in Step 1.3)
+├── requirements.txt  # Pinned Python dependencies
 └── README.md
+```
+
+## Installation
+
+Requires Python 3.11+ (developed on 3.12).
+
+```bash
+git clone https://github.com/z3nsz/nba-kalshi-ai.git
+cd nba-kalshi-ai
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
 ## Roadmap
