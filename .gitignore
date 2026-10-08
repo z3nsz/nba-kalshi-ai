@@ -16,6 +16,8 @@ venv/
 
 # Jupyter
 .ipynb_checkpoints/
+# Personal learning notebooks (kept local, not part of the portfolio)
+notebooks/learning/
 
 # OS / editor
 .DS_Store

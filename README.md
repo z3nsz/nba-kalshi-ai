@@ -14,7 +14,10 @@ compares them with Kalshi prediction-market prices to look for potential mispric
 - [x] Step 1.3: Dependencies
 - [x] Step 1.4: Test the NBA API
 - [x] Step 1.5: Download historical seasons
-- [ ] Step 1.6: Inspect the raw data
+- [x] Step 1.6: Inspect the raw data
+- [x] Step 1.7: Clean to one row per game
+- [x] Step 1.8: Rolling recent-form features
+- [ ] Step 1.9: Rest days, back-to-backs, home court
 
 ## Folder Structure
 
@@ -24,7 +27,7 @@ nba-kalshi-ai/
 │   ├── raw/          # Untouched API downloads (never edited by hand)
 │   └── processed/    # Cleaned and feature-engineered datasets
 ├── src/              # Reusable Python modules (collection, cleaning, features)
-├── notebooks/        # Jupyter notebooks for exploratory analysis
+├── notebooks/        # Analysis notebooks documenting the process and findings
 ├── tests/            # pytest data-validation tests
 ├── requirements.txt  # Pinned Python dependencies
 └── README.md
@@ -47,6 +50,8 @@ pip install -r requirements.txt
 ```bash
 python -m src.collect_data          # download raw game logs to data/raw/ (skips seasons already saved)
 python -m src.collect_data --force  # re-download everything
+python -m src.clean_data            # quality report + one row per game -> data/processed/nba_games.csv
+python -m src.feature_engineering   # leakage-safe pre-game features -> data/processed/nba_features.csv
 ```
 
 ## Data Sources
