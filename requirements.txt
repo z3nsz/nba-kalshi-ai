@@ -1,5 +1,6 @@
 # Phase 1: data collection, cleaning, feature engineering, EDA, tests
 pandas==3.0.6
+requests==2.34.2
 numpy==2.5.3
 nba_api==1.11.4
 matplotlib==3.11.2

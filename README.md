@@ -12,7 +12,9 @@ compares them with Kalshi prediction-market prices to look for potential mispric
 - [x] Step 1.1: Project structure
 - [x] Step 1.2: Virtual environment
 - [x] Step 1.3: Dependencies
-- [ ] Step 1.4: Test the NBA API
+- [x] Step 1.4: Test the NBA API
+- [x] Step 1.5: Download historical seasons
+- [ ] Step 1.6: Inspect the raw data
 
 ## Folder Structure
 
@@ -39,6 +41,18 @@ python3 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
+
+## How to Run
+
+```bash
+python -m src.collect_data          # download raw game logs to data/raw/ (skips seasons already saved)
+python -m src.collect_data --force  # re-download everything
+```
+
+## Data Sources
+
+- **NBA game logs:** [`nba_api`](https://github.com/swar/nba_api) `LeagueGameLog` endpoint (stats.nba.com),
+  regular seasons 2020-21 through 2025-26. Data files are not committed; run the scripts to rebuild them.
 
 ## Roadmap
 
