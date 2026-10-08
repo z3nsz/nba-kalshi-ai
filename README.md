@@ -17,7 +17,9 @@ compares them with Kalshi prediction-market prices to look for potential mispric
 - [x] Step 1.6: Inspect the raw data
 - [x] Step 1.7: Clean to one row per game
 - [x] Step 1.8: Rolling recent-form features
-- [ ] Step 1.9: Rest days, back-to-backs, home court
+- [x] Step 1.9: Rest days, back-to-backs, home court
+- [x] Step 1.9b: Elo ratings (with 2018-20 warm-up seasons)
+- [ ] Step 1.10: Exploratory data analysis notebook
 
 ## Folder Structure
 
@@ -57,7 +59,10 @@ python -m src.feature_engineering   # leakage-safe pre-game features -> data/pro
 ## Data Sources
 
 - **NBA game logs:** [`nba_api`](https://github.com/swar/nba_api) `LeagueGameLog` endpoint (stats.nba.com),
-  regular seasons 2020-21 through 2025-26. Data files are not committed; run the scripts to rebuild them.
+  regular seasons 2020-21 through 2025-26 for modeling, plus 2018-19 and 2019-20 used only to warm up
+  Elo ratings. Data files are not committed; run the scripts to rebuild them.
+- **Elo method:** settings follow FiveThirtyEight's published NBA Elo (K = 20, home advantage = 100,
+  75% season carry-over, margin-of-victory multiplier).
 
 ## Roadmap
 

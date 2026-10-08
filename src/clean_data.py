@@ -10,10 +10,15 @@ Usage:
 
 import pandas as pd
 
-from src.collect_data import PROJECT_ROOT, SEASONS, load_raw_season
+from src.collect_data import ALL_SEASONS, PROJECT_ROOT, load_raw_season
 
 PROCESSED_DATA_DIR = PROJECT_ROOT / "data" / "processed"
 GAMES_PATH = PROCESSED_DATA_DIR / "nba_games.csv"
+
+# 2019-20 restart: after the COVID shutdown, every game from 2020-07-30 on was
+# played without fans in the Orlando "bubble", so none had real home court.
+BUBBLE_SEASON = "2019-20"
+BUBBLE_START_DATE = "2020-07-30"
 
 # Neutral-site games before 2024-25. In these seasons the API still lists a
 # nominal home team, so they cannot be detected from MATCHUP. Each ID was
@@ -40,7 +45,7 @@ TEAM_STAT_COLUMNS = {
 }
 
 
-def load_all_raw_seasons(seasons: list[str] = SEASONS) -> pd.DataFrame:
+def load_all_raw_seasons(seasons: list[str] = ALL_SEASONS) -> pd.DataFrame:
     """Stack every raw season into one DataFrame, adding a readable SEASON column."""
     frames = [load_raw_season(season).assign(SEASON=season) for season in seasons]
     return pd.concat(frames, ignore_index=True)
@@ -137,8 +142,11 @@ def build_games_table(raw: pd.DataFrame) -> pd.DataFrame:
     )
 
     games["game_date"] = pd.to_datetime(games["game_date"])
+    is_bubble_game = (games["season"] == BUBBLE_SEASON) & (games["game_date"] >= BUBBLE_START_DATE)
     games["is_neutral_site"] = (
-        games["api_neutral_site"] | games["game_id"].isin(KNOWN_NEUTRAL_SITE_GAME_IDS)
+        games["api_neutral_site"]
+        | games["game_id"].isin(KNOWN_NEUTRAL_SITE_GAME_IDS)
+        | is_bubble_game
     ).astype(int)
     games["home_team_win"] = (games["home_score"] > games["away_score"]).astype(int)
 

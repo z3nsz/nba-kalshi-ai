@@ -21,7 +21,12 @@ from nba_api.stats.endpoints import leaguegamelog
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw"
 
+# Seasons the model is trained and evaluated on.
 SEASONS = ["2020-21", "2021-22", "2022-23", "2023-24", "2024-25", "2025-26"]
+# Earlier seasons used only to "warm up" Elo ratings so they are realistic by
+# October 2020. They never become rows in the features file.
+WARMUP_SEASONS = ["2018-19", "2019-20"]
+ALL_SEASONS = WARMUP_SEASONS + SEASONS
 
 REQUEST_TIMEOUT_SECONDS = 30
 MAX_ATTEMPTS = 4
@@ -100,4 +105,4 @@ if __name__ == "__main__":
     parser.add_argument("--force", action="store_true", help="re-download seasons already on disk")
     args = parser.parse_args()
 
-    download_seasons(SEASONS, force=args.force)
+    download_seasons(ALL_SEASONS, force=args.force)

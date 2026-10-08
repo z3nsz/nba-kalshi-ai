@@ -6,8 +6,15 @@ Every feature for a game uses only games that finished BEFORE it. The pattern:
        is excluded, then take a rolling mean over the previous N games.
     3. Attach each team's features back onto the game as home_* / away_*.
 
-Step 1.8: recent-form features (win %, points scored/allowed, point differential).
-Step 1.9 will add rest days, back-to-backs, and the home-court indicator.
+Features:
+    - recent form: win % (last 5 / 10), points scored / allowed and point
+      differential (last 10)
+    - rest: days since the team's previous game, back-to-back flag
+    - home court: 1 for a true home game, 0 for a neutral-site game
+    - Elo: each team's rating before tip-off and the implied home win probability
+
+Elo is computed over the warm-up seasons too, so ratings are realistic by the
+start of 2020-21; only the modeling seasons are written to the features file.
 
 Usage:
     python -m src.feature_engineering
@@ -16,6 +23,7 @@ Usage:
 import pandas as pd
 
 from src.clean_data import PROCESSED_DATA_DIR, load_games_table
+from src.collect_data import SEASONS
 
 FEATURES_PATH = PROCESSED_DATA_DIR / "nba_features.csv"
 
@@ -27,6 +35,14 @@ ROLLING_FEATURES = [
     ("avg_pts_allowed_last10", "points_allowed", 10),
     ("avg_point_diff_last10", "point_diff", 10),
 ]
+
+# Elo settings, taken from FiveThirtyEight's published NBA Elo method rather than
+# tuned on our data, so choosing them does not peek at the seasons we test on.
+ELO_START = 1500              # rating for a team we have not seen yet
+ELO_K = 20                    # how far one game moves a rating
+ELO_HOME_ADVANTAGE = 100      # rating points added to the home team (not at neutral sites)
+ELO_SEASON_CARRYOVER = 0.75   # keep 75% of last season's distance from the mean...
+ELO_SEASON_MEAN = 1505        # ...and regress the rest toward this value
 
 # Columns copied from nba_games.csv into the features file. Box-score stats from
 # the game itself (scores, FG%, rebounds...) are deliberately left out: they are
@@ -90,10 +106,73 @@ def add_rolling_features(team_games: pd.DataFrame) -> pd.DataFrame:
     return team_games
 
 
+def add_rest_features(team_games: pd.DataFrame) -> pd.DataFrame:
+    """Add days of rest and a back-to-back flag for each team-game.
+
+    Game dates are published in the schedule long before tip-off, so using the
+    current game's date here is not leakage.
+    """
+    team_games = team_games.copy()
+    by_team_season = team_games.groupby(["team", "season"])
+
+    # Days between this game and the team's previous game in the same season.
+    # NaN for the season opener: there is no previous regular-season game.
+    team_games["days_since_last_game"] = by_team_season["game_date"].diff().dt.days
+
+    # 1 = played yesterday too. The opener is 0: no regular-season game came the day before.
+    team_games["is_back_to_back"] = (team_games["days_since_last_game"] == 1).astype(int)
+    return team_games
+
+
+def elo_win_probability(rating_gap: float) -> float:
+    """Chance the first team wins when it is rated `rating_gap` points higher."""
+    return 1 / (1 + 10 ** (-rating_gap / 400))
+
+
+def compute_elo(games: pd.DataFrame) -> pd.DataFrame:
+    """Walk through games in date order and record each team's Elo BEFORE each game.
+
+    Ratings are only updated after a game's pre-game values are stored, so a
+    game's own result never reaches its own features. Games on the same date
+    never share a team, so the order of games within a date does not matter.
+    """
+    games = games.sort_values(["game_date", "game_id"])
+    ratings: dict[str, float] = {}
+    current_season = None
+    rows = []
+
+    for game in games.itertuples():
+        if game.season != current_season:
+            # New season: pull every rating part of the way back toward average,
+            # because rosters change over the summer.
+            ratings = {team: ELO_SEASON_MEAN + ELO_SEASON_CARRYOVER * (rating - ELO_SEASON_MEAN)
+                       for team, rating in ratings.items()}
+            current_season = game.season
+
+        home_elo = ratings.get(game.home_team, ELO_START)
+        away_elo = ratings.get(game.away_team, ELO_START)
+        home_bonus = 0 if game.is_neutral_site else ELO_HOME_ADVANTAGE
+        home_win_prob = elo_win_probability(home_elo + home_bonus - away_elo)
+        rows.append((game.game_id, home_elo, away_elo, home_win_prob))
+
+        # Update after the game. Bigger wins move ratings more, but less so when
+        # the favorite wins big (FiveThirtyEight's margin-of-victory multiplier).
+        margin = abs(game.home_score - game.away_score)
+        winner_gap = (home_elo + home_bonus - away_elo) * (1 if game.home_team_win else -1)
+        margin_multiplier = (margin + 3) ** 0.8 / (7.5 + 0.006 * winner_gap)
+        change = ELO_K * margin_multiplier * (game.home_team_win - home_win_prob)
+        ratings[game.home_team] = home_elo + change
+        ratings[game.away_team] = away_elo - change
+
+    return pd.DataFrame(rows, columns=["game_id", "home_elo", "away_elo", "elo_home_win_prob"])
+
+
 def build_features_table(games: pd.DataFrame) -> pd.DataFrame:
-    """One row per game: game info, target, and home_/away_ pre-game features."""
-    team_games = add_rolling_features(to_team_games(games))
-    feature_columns = [name for name, _, _ in ROLLING_FEATURES] + ["games_played_before"]
+    """One row per game in the modeling seasons: game info, target, and pre-game features."""
+    team_games = add_rest_features(add_rolling_features(to_team_games(games)))
+    feature_columns = [name for name, _, _ in ROLLING_FEATURES] + [
+        "games_played_before", "days_since_last_game", "is_back_to_back",
+    ]
 
     features = games[GAME_COLUMNS].copy()
     for side in ["home", "away"]:
@@ -103,6 +182,14 @@ def build_features_table(games: pd.DataFrame) -> pd.DataFrame:
         )
         features = features.merge(side_features, on="game_id", how="left", validate="one_to_one")
 
+    # The home team has real home-court advantage unless the game was at a neutral site.
+    features["home_court"] = 1 - features["is_neutral_site"]
+
+    features = features.merge(compute_elo(games), on="game_id", how="left", validate="one_to_one")
+    features["elo_diff"] = features["home_elo"] - features["away_elo"]
+
+    # Warm-up seasons only fed the Elo ratings; drop them from the output.
+    features = features[features["season"].isin(SEASONS)]
     return features.sort_values(["game_date", "game_id"]).reset_index(drop=True)
 
 
@@ -116,8 +203,21 @@ if __name__ == "__main__":
     missing = features.isna().sum()
     print(missing[missing > 0].to_string())
 
+    print("\nHome win rate by rest situation (non-neutral games):")
+    true_home = features[features["home_court"] == 1]
+    situations = {
+        "home on back-to-back, away rested": (true_home["home_is_back_to_back"] == 1) & (true_home["away_is_back_to_back"] == 0),
+        "both rested or both back-to-back": true_home["home_is_back_to_back"] == true_home["away_is_back_to_back"],
+        "away on back-to-back, home rested": (true_home["home_is_back_to_back"] == 0) & (true_home["away_is_back_to_back"] == 1),
+    }
+    for label, mask in situations.items():
+        print(f"  {label:36s} {true_home.loc[mask, 'home_team_win'].mean():.3f}  ({mask.sum()} games)")
+
+    elo_favorite_won = (features["elo_home_win_prob"] > 0.5).astype(int) == features["home_team_win"]
+    print(f"\nElo favorite won {elo_favorite_won.mean():.3f} of games (always picking home: {features['home_team_win'].mean():.3f})")
+
     preview = ["game_date", "home_team", "away_team", "home_team_win",
-               "home_win_pct_last10", "away_win_pct_last10",
-               "home_avg_point_diff_last10", "away_avg_point_diff_last10"]
+               "home_elo", "away_elo", "elo_home_win_prob",
+               "home_is_back_to_back", "away_is_back_to_back"]
     print("\nA mid-season sample:")
-    print(features.loc[features["game_date"] == "2025-01-15", preview].head(4).to_string(index=False))
+    print(features.loc[features["game_date"] == "2025-01-15", preview].head(4).round({"home_elo": 0, "away_elo": 0, "elo_home_win_prob": 3}).to_string(index=False))
