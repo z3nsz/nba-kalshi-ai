@@ -43,6 +43,9 @@ ELO_K = 20                    # how far one game moves a rating
 ELO_HOME_ADVANTAGE = 100      # rating points added to the home team (not at neutral sites)
 ELO_SEASON_CARRYOVER = 0.75   # keep 75% of last season's distance from the mean...
 ELO_SEASON_MEAN = 1505        # ...and regress the rest toward this value
+# Known issue: +100 home advantage fits older NBA eras. In 2020-26 home teams win
+# ~55%, so elo_home_win_prob overstates the home side by ~6-8 points. Do not
+# compare it to market prices as-is; calibrate it in Phase 2 on training seasons only.
 
 # Columns copied from nba_games.csv into the features file. Box-score stats from
 # the game itself (scores, FG%, rebounds...) are deliberately left out: they are
