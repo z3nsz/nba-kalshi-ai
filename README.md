@@ -29,7 +29,8 @@ compares them with Kalshi prediction-market prices to look for potential mispric
 - [x] Step 2.3: Elo baseline calibrated on training seasons
 - [x] Step 2.4: Logistic regression
 - [x] Step 2.5: Random forest
-- [ ] Step 2.6: XGBoost
+- [x] Step 2.6: XGBoost
+- [ ] Step 2.7: Hyperparameter tuning
 
 ## Folder Structure
 
@@ -70,6 +71,7 @@ python -m src.evaluate              # score naive baselines on train and validat
 python -m src.elo_baseline          # tune Elo on train seasons, score on validation (~15 s)
 python -m src.logistic_model        # logistic regression on three feature sets
 python -m src.random_forest_model   # random forest, default vs. reasoned settings
+python -m src.xgboost_model         # XGBoost with early stopping inside the training seasons
 python -m pytest                    # run the data validation and leakage tests
 ```
 
