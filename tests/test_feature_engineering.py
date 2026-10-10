@@ -7,16 +7,18 @@ import pytest
 from src.collect_data import SEASONS
 from src.feature_engineering import (
     ELO_START,
+    GAME_COLUMNS,
     ROLLING_FEATURES,
     add_rest_features,
     build_features_table,
     compute_elo,
     previous_games_mean,
 )
+from src.strength_features import STRENGTH_FEATURES
 
 ROLLING_NAMES = [name for name, _, _ in ROLLING_FEATURES]
 PRE_GAME_COLUMNS = (
-    [f"{side}_{name}" for side in ["home", "away"] for name in ROLLING_NAMES]
+    [f"{side}_{name}" for side in ["home", "away"] for name in ROLLING_NAMES + STRENGTH_FEATURES]
     + ["home_elo", "away_elo", "elo_home_win_prob", "elo_diff"]
 )
 
@@ -70,11 +72,14 @@ def test_features_contain_only_modeling_seasons(features, games):
     assert features["game_id"].is_unique
 
 
-def test_no_same_game_results_in_features(features):
-    """Box-score stats from the game itself are only known after it ends."""
-    forbidden = {"home_score", "away_score", "home_fg_pct", "away_fg_pct", "home_fg3_pct", "away_fg3_pct",
-                 "home_ft_pct", "away_ft_pct", "home_reb", "away_reb", "home_ast", "away_ast",
-                 "home_tov", "away_tov"}
+def test_no_same_game_results_in_features(features, games):
+    """Box-score stats from the game itself are only known after it ends.
+
+    Every games-table column that is not deliberately copied over (GAME_COLUMNS) is a
+    same-game stat or ID, so none of them may appear in the features table.
+    """
+    forbidden = set(games.columns) - set(GAME_COLUMNS) - {"home_team_id", "away_team_id"}
+    assert {"home_score", "home_fga", "away_oreb"} <= forbidden  # the check covers new box-score columns
     assert not forbidden & set(features.columns)
 
 
@@ -116,7 +121,7 @@ def test_changing_a_result_does_not_change_that_games_features(games, features):
 
 def test_missing_rolling_features_only_for_season_openers(features):
     for side in ["home", "away"]:
-        has_missing = features[[f"{side}_{name}" for name in ROLLING_NAMES]].isna().any(axis=1)
+        has_missing = features[[f"{side}_{name}" for name in ROLLING_NAMES + STRENGTH_FEATURES]].isna().any(axis=1)
         is_opener = features[f"{side}_games_played_before"] == 0
         assert (has_missing == is_opener).all()
 

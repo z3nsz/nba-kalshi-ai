@@ -25,6 +25,26 @@ def make_model_inputs(features: pd.DataFrame) -> pd.DataFrame:
     inputs["rest_days_diff"] = features["home_days_since_last_game"] - features["away_days_since_last_game"]
     # Positive = the AWAY team is the one on a back-to-back (good for the home team).
     inputs["back_to_back_diff"] = features["away_is_back_to_back"] - features["home_is_back_to_back"]
+
+    # Phase 3 strength features (src/strength_features.py).
+    for window in [5, 10]:
+        inputs[f"net_rating_last{window}_diff"] = (features[f"home_net_rating_last{window}"]
+                                                   - features[f"away_net_rating_last{window}"])
+        inputs[f"off_rating_last{window}_diff"] = (features[f"home_off_rating_last{window}"]
+                                                   - features[f"away_off_rating_last{window}"])
+        # Defensive rating: lower is better, so away minus home keeps "positive favors home".
+        inputs[f"def_rating_last{window}_diff"] = (features[f"away_def_rating_last{window}"]
+                                                   - features[f"home_def_rating_last{window}"])
+        # Positive = the home team's recent opponents were stronger.
+        inputs[f"opp_elo_last{window}_diff"] = features[f"home_opp_elo_last{window}"] - features[f"away_opp_elo_last{window}"]
+    inputs["margin_vs_elo_last10_diff"] = features["home_margin_vs_elo_last10"] - features["away_margin_vs_elo_last10"]
+
+    # Phase 3 availability features (src/availability_features.py), present only when merged in.
+    # Away minus home: positive = the AWAY team is missing more (good for the home team).
+    # Unknown (no usable report) becomes 0 below = "no evidence either team is missing more".
+    if "home_out_minutes" in features:
+        for stat in ["out_minutes", "questionable_minutes", "starters_out"]:
+            inputs[f"{stat}_diff"] = features[f"away_{stat}"] - features[f"home_{stat}"]
     return inputs.fillna(0)
 
 
@@ -34,6 +54,17 @@ FEATURE_SETS = {
     "elo + form": ["elo_diff", "home_court", "point_diff_last10_diff", "win_pct_last10_diff", "win_pct_last5_diff"],
     "elo + form + rest": ["elo_diff", "home_court", "point_diff_last10_diff", "win_pct_last10_diff",
                           "win_pct_last5_diff", "rest_days_diff", "back_to_back_diff"],
+}
+
+
+# Phase 3 feature groups, added one at a time on top of the Phase 2 inputs (ablation, Step 3.3).
+PHASE2_INPUTS = FEATURE_SETS["elo + form + rest"]
+FEATURE_GROUPS = {
+    # Offense and defense separately. Net rating is NOT added on top: net_rating_diff equals
+    # off_rating_diff + def_rating_diff exactly, so it would repeat the same information.
+    "ratings": [f"{stat}_last{window}_diff" for window in [5, 10] for stat in ["off_rating", "def_rating"]],
+    "schedule strength": ["opp_elo_last5_diff", "opp_elo_last10_diff", "margin_vs_elo_last10_diff"],
+    "availability": ["out_minutes_diff", "questionable_minutes_diff", "starters_out_diff"],
 }
 
 

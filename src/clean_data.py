@@ -42,6 +42,10 @@ TEAM_STAT_COLUMNS = {
     "REB": "reb",
     "AST": "ast",
     "TOV": "tov",
+    # Needed to estimate possessions for offensive / defensive ratings.
+    "FGA": "fga",
+    "FTA": "fta",
+    "OREB": "oreb",
 }
 
 

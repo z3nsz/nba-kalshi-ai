@@ -9,3 +9,4 @@ jupyter==1.1.1
 pytest==9.1.1
 scikit-learn==1.9.1
 xgboost==3.4.1
+pdfplumber==0.11.10

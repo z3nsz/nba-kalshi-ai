@@ -12,6 +12,8 @@ Features:
     - rest: days since the team's previous game, back-to-back flag
     - home court: 1 for a true home game, 0 for a neutral-site game
     - Elo: each team's rating before tip-off and the implied home win probability
+    - strength (src/strength_features.py): offensive / defensive / net rating per
+      100 possessions, average opponent Elo, and margin versus Elo expectation
 
 Elo is computed over the warm-up seasons too, so ratings are realistic by the
 start of 2020-21; only the modeling seasons are written to the features file.
@@ -24,6 +26,7 @@ import pandas as pd
 
 from src.clean_data import PROCESSED_DATA_DIR, load_games_table
 from src.collect_data import SEASONS
+from src.strength_features import STRENGTH_FEATURES, strength_features
 
 FEATURES_PATH = PROCESSED_DATA_DIR / "nba_features.csv"
 
@@ -175,9 +178,12 @@ def compute_elo(games: pd.DataFrame, k: float = ELO_K,
 
 def build_features_table(games: pd.DataFrame) -> pd.DataFrame:
     """One row per game in the modeling seasons: game info, target, and pre-game features."""
+    elo = compute_elo(games)
     team_games = add_rest_features(add_rolling_features(to_team_games(games)))
+    team_games = team_games.merge(strength_features(games, elo, ELO_HOME_ADVANTAGE),
+                                  on=["game_id", "team"], how="left", validate="one_to_one")
     feature_columns = [name for name, _, _ in ROLLING_FEATURES] + [
-        "games_played_before", "days_since_last_game", "is_back_to_back",
+        "games_played_before", "days_since_last_game", "is_back_to_back", *STRENGTH_FEATURES,
     ]
 
     features = games[GAME_COLUMNS].copy()
@@ -191,7 +197,7 @@ def build_features_table(games: pd.DataFrame) -> pd.DataFrame:
     # The home team has real home-court advantage unless the game was at a neutral site.
     features["home_court"] = 1 - features["is_neutral_site"]
 
-    features = features.merge(compute_elo(games), on="game_id", how="left", validate="one_to_one")
+    features = features.merge(elo, on="game_id", how="left", validate="one_to_one")
     features["elo_diff"] = features["home_elo"] - features["away_elo"]
 
     # Warm-up seasons only fed the Elo ratings; drop them from the output.

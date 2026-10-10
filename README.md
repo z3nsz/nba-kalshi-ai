@@ -30,7 +30,19 @@ compares them with Kalshi prediction-market prices to look for potential mispric
 - [x] Step 2.4: Logistic regression
 - [x] Step 2.5: Random forest
 - [x] Step 2.6: XGBoost
-- [ ] Step 2.7: Hyperparameter tuning
+- [x] Step 2.7: Hyperparameter tuning
+- [x] Step 2.8: Calibration curves and model comparison
+- [ ] Step 2.9: Final test-set evaluation (**on hold** until feature work in Phase 3 is done; the 2025-26 test season stays untouched)
+
+**Phase 3 — Feature Engineering, Round 2** (in progress)
+
+- [x] Step 3.1: Data availability audit → [`docs/data_availability_audit.md`](docs/data_availability_audit.md)
+- [x] Step 3.2a: Offensive / defensive / net ratings and strength of schedule (`src/strength_features.py`)
+- [x] Step 3.2c (prototype): Official injury report parser on 10 sample PDFs → feasible, see audit
+- [x] Step 3.3 (part 1): Walk-forward ablation of ratings + schedule strength → **no improvement; not added** (`python -m src.walk_forward`)
+- [x] Step 3.2c / 3.3: Player availability from official injury reports → **added**: walk-forward log loss
+  0.6190 → 0.6097 (−0.0093, 95% CI [−0.0142, −0.0044]), accuracy 65.0% → 66.9%, better in all 3 seasons
+- [ ] Step 3.2b: Travel and fatigue
 
 ## Folder Structure
 
@@ -41,6 +53,8 @@ nba-kalshi-ai/
 │   └── processed/    # Cleaned and feature-engineered datasets
 ├── src/              # Reusable Python modules (collection, cleaning, features)
 ├── notebooks/        # Analysis notebooks documenting the process and findings
+├── results/          # small, committed outputs (tuned settings, comparison table, charts)
+├── docs/             # design documents (data availability audit)
 ├── tests/            # pytest data-validation and leakage tests
 ├── pytest.ini        # pytest configuration
 ├── requirements.txt  # Pinned Python dependencies
@@ -72,6 +86,11 @@ python -m src.elo_baseline          # tune Elo on train seasons, score on valida
 python -m src.logistic_model        # logistic regression on three feature sets
 python -m src.random_forest_model   # random forest, default vs. reasoned settings
 python -m src.xgboost_model         # XGBoost with early stopping inside the training seasons
+python -m src.tuning                # tune all three models on validation (~75 s) -> results/tuned_settings.json
+python -m src.compare_models        # validation comparison, calibration chart, bootstrap intervals
+python -m src.injury_download       # official injury reports for each development-season game (~1 hour, ~200 MB)
+python -m src.availability_features # expected-minutes-missing features from those reports
+python -m src.walk_forward          # walk-forward feature-group ablation (development seasons only)
 python -m pytest                    # run the data validation and leakage tests
 ```
 
@@ -94,6 +113,8 @@ home-court advantage, scoring, recent form, rest, Elo calibration, and single-fe
 - **NBA game logs:** [`nba_api`](https://github.com/swar/nba_api) `LeagueGameLog` endpoint (stats.nba.com),
   regular seasons 2020-21 through 2025-26 for modeling, plus 2018-19 and 2019-20 used only to warm up
   Elo ratings. Data files are not committed; run the scripts to rebuild them.
+- **Injury reports (prototype):** the NBA's official pre-game injury report PDFs
+  (`ak-static.cms.nba.com/referee/injury/`), parsed with `pdfplumber`. Not committed.
 - **Elo method:** settings follow FiveThirtyEight's published NBA Elo (K = 20, home advantage = 100,
   75% season carry-over, margin-of-victory multiplier).
 
@@ -101,8 +122,9 @@ home-court advantage, scoring, recent form, rest, Elo calibration, and single-fe
 
 1. NBA data collection & feature engineering
 2. Machine learning models (Logistic Regression, Elo, Random Forest, XGBoost)
-3. Kalshi API integration
-4. Backtesting & evaluation
-5. Streamlit dashboard
+3. Feature engineering round 2 (ratings, schedule strength, travel, player availability)
+4. Kalshi API integration
+5. Backtesting & evaluation
+6. Streamlit dashboard
 
 _Installation, usage, and data-source details will be filled in as each step is built._
