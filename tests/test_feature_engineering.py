@@ -142,3 +142,14 @@ def test_feature_values_in_valid_ranges(features):
 
 def test_feature_building_is_reproducible(games, features):
     pd.testing.assert_frame_equal(build_features_table(games), features)
+
+
+def test_elo_home_advantage_setting_is_applied():
+    """With no home advantage, two unrated teams are a 50/50 game; with +100 the home side is favored."""
+    one_game = pd.DataFrame({
+        "game_id": ["g1"], "game_date": pd.to_datetime(["2024-11-01"]), "season": ["2024-25"],
+        "home_team": ["AAA"], "away_team": ["BBB"], "home_score": [100], "away_score": [90],
+        "home_team_win": [1], "is_neutral_site": [0],
+    })
+    assert compute_elo(one_game, home_advantage=0)["elo_home_win_prob"].iloc[0] == pytest.approx(0.5)
+    assert compute_elo(one_game, home_advantage=100)["elo_home_win_prob"].iloc[0] == pytest.approx(0.640, abs=0.001)

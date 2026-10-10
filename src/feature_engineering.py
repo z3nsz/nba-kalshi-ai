@@ -132,12 +132,15 @@ def elo_win_probability(rating_gap: float) -> float:
     return 1 / (1 + 10 ** (-rating_gap / 400))
 
 
-def compute_elo(games: pd.DataFrame) -> pd.DataFrame:
+def compute_elo(games: pd.DataFrame, k: float = ELO_K,
+                home_advantage: float = ELO_HOME_ADVANTAGE) -> pd.DataFrame:
     """Walk through games in date order and record each team's Elo BEFORE each game.
 
     Ratings are only updated after a game's pre-game values are stored, so a
     game's own result never reaches its own features. Games on the same date
     never share a team, so the order of games within a date does not matter.
+    `k` and `home_advantage` default to the published settings; src/elo_baseline.py
+    tunes them on the training seasons.
     """
     games = games.sort_values(["game_date", "game_id"])
     ratings: dict[str, float] = {}
@@ -154,7 +157,7 @@ def compute_elo(games: pd.DataFrame) -> pd.DataFrame:
 
         home_elo = ratings.get(game.home_team, ELO_START)
         away_elo = ratings.get(game.away_team, ELO_START)
-        home_bonus = 0 if game.is_neutral_site else ELO_HOME_ADVANTAGE
+        home_bonus = 0 if game.is_neutral_site else home_advantage
         home_win_prob = elo_win_probability(home_elo + home_bonus - away_elo)
         rows.append((game.game_id, home_elo, away_elo, home_win_prob))
 
@@ -163,7 +166,7 @@ def compute_elo(games: pd.DataFrame) -> pd.DataFrame:
         margin = abs(game.home_score - game.away_score)
         winner_gap = (home_elo + home_bonus - away_elo) * (1 if game.home_team_win else -1)
         margin_multiplier = (margin + 3) ** 0.8 / (7.5 + 0.006 * winner_gap)
-        change = ELO_K * margin_multiplier * (game.home_team_win - home_win_prob)
+        change = k * margin_multiplier * (game.home_team_win - home_win_prob)
         ratings[game.home_team] = home_elo + change
         ratings[game.away_team] = away_elo - change
 
@@ -194,6 +197,11 @@ def build_features_table(games: pd.DataFrame) -> pd.DataFrame:
     # Warm-up seasons only fed the Elo ratings; drop them from the output.
     features = features[features["season"].isin(SEASONS)]
     return features.sort_values(["game_date", "game_id"]).reset_index(drop=True)
+
+
+def load_features_table() -> pd.DataFrame:
+    """Read nba_features.csv with the right types (game_id as text, game_date as a date)."""
+    return pd.read_csv(FEATURES_PATH, dtype={"game_id": str}, parse_dates=["game_date"])
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-# Phase 1: data collection, cleaning, feature engineering, EDA, tests
+# Data collection, cleaning, features, EDA, tests (Phase 1) and modeling (Phase 2)
 pandas==3.0.6
 requests==2.34.2
 numpy==2.5.3
@@ -7,3 +7,4 @@ matplotlib==3.11.2
 seaborn==0.13.2
 jupyter==1.1.1
 pytest==9.1.1
+scikit-learn==1.9.1
