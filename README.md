@@ -22,7 +22,14 @@ compares them with Kalshi prediction-market prices to look for potential mispric
 - [x] Step 1.10: Exploratory data analysis notebook
 - [x] Step 1.11: Automated data validation tests (27 pytest tests)
 
-**Next:** Phase 2 — Machine learning models
+**Phase 2 — Machine Learning Models** (in progress)
+
+- [x] Step 2.1: Chronological train / validation / test split
+- [x] Step 2.2: Evaluation metrics and naive baselines
+- [x] Step 2.3: Elo baseline calibrated on training seasons
+- [x] Step 2.4: Logistic regression
+- [x] Step 2.5: Random forest
+- [ ] Step 2.6: XGBoost
 
 ## Folder Structure
 
@@ -58,6 +65,11 @@ python -m src.collect_data          # download raw game logs to data/raw/ (skips
 python -m src.collect_data --force  # re-download everything
 python -m src.clean_data            # quality report + one row per game -> data/processed/nba_games.csv
 python -m src.feature_engineering   # leakage-safe pre-game features -> data/processed/nba_features.csv
+python -m src.split                 # summary of the chronological train / validation / test split
+python -m src.evaluate              # score naive baselines on train and validation
+python -m src.elo_baseline          # tune Elo on train seasons, score on validation (~15 s)
+python -m src.logistic_model        # logistic regression on three feature sets
+python -m src.random_forest_model   # random forest, default vs. reasoned settings
 python -m pytest                    # run the data validation and leakage tests
 ```
 
