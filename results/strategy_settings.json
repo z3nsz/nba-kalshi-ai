@@ -1,0 +1,20 @@
+{
+  "description": "Pre-registered paper-trading rules; see docs/trading_protocol.md",
+  "model_column": "E1+E2 (final model)",
+  "entry_price": "yes ask, last 1-minute candle ending at or before tip-off minus 60 minutes",
+  "primary_edge_threshold": 0.03,
+  "sensitivity_thresholds": [0.0, 0.01, 0.02, 0.03, 0.05, 0.08],
+  "contracts_per_bet": 100,
+  "max_positions_per_game": 1,
+  "entry_liquidity_lookback_minutes": 5,
+  "exit_signal_delay_minutes": 1,
+  "pregame_fallback_minutes": 10,
+  "pregame_max_holding_minutes": 60,
+  "partial_exits": false,
+  "fee": "taker: round_up(0.07 x C x P x (1 - P)) to the cent, per order, on every buy and sell; settlement assumed fee-free",
+  "bootstrap": {"draws": 2000, "seed": 42, "resample": "game dates"},
+  "random_seed": 42,
+  "primary_strategy": "1: hold to settlement",
+  "secondary_strategies": ["2: pregame fair-value exit", "3: in-game fair-value exit"],
+  "success": "strategy 1 at the primary threshold: mean profit per bet > 0 with the 95% date-block interval above 0"
+}

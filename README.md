@@ -67,7 +67,9 @@ Full protocol and results: [`docs/final_test_protocol.md`](docs/final_test_proto
   1-minute historical bid/ask for all 2025-26 games, prices available 60 minutes before tip-off
 - [x] Step 4.2: Read-only Kalshi client (`src/kalshi_client.py`, cached, retries) and taker-fee formula (`src/kalshi_fees.py`)
 - [x] Step 4.3: All 1,230 games matched; bid/ask 60 minutes before tip-off for 1,227 (`src/kalshi_prices.py`)
-- [ ] Step 4.4: Pre-register the paper-trading strategy, then compare model vs. market on 2025-26
+- [x] Step 4.4: Three paper-trading strategies pre-registered and **locked** → [`docs/trading_protocol.md`](docs/trading_protocol.md)
+  (1: hold to settlement, primary; 2: pregame fair-value exit; 3: in-game fair-value exit)
+- [ ] Step 4.5: One-time paper-trading backtest on 2025-26 (`python -m src.paper_trade --confirm-one-time-backtest`)
 
 ## Folder Structure
 
