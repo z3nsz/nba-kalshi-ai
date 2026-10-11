@@ -4,6 +4,8 @@ import json
 import subprocess
 import sys
 
+import pytest
+
 from src.final_test import RESULTS_PATH, SETTINGS_PATH
 from src.walk_forward import DEVELOPMENT_SEASONS, TEST_SEASONS
 
@@ -12,7 +14,17 @@ def test_refuses_to_run_without_confirmation():
     result = subprocess.run([sys.executable, "-m", "src.final_test"], capture_output=True, text=True)
     assert result.returncode != 0
     assert "Refusing to run" in result.stderr
-    assert not RESULTS_PATH.exists() or "already exists" in result.stderr
+
+
+def test_refuses_a_second_run_once_results_exist():
+    """The one-time test has been run; even WITH the confirmation flag it must refuse now."""
+    if not RESULTS_PATH.exists():
+        pytest.skip("final test not run yet; running it here would use up the test season")
+    before = RESULTS_PATH.read_text()
+    result = subprocess.run([sys.executable, "-m", "src.final_test", "--confirm-one-time-test"],
+                            capture_output=True, text=True)
+    assert result.returncode != 0 and "already exists" in result.stderr
+    assert RESULTS_PATH.read_text() == before, "results must not be overwritten"
 
 
 def test_locked_settings_train_only_on_development_seasons():

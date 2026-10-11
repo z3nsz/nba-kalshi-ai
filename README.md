@@ -65,7 +65,9 @@ Full protocol and results: [`docs/final_test_protocol.md`](docs/final_test_proto
 
 - [x] Step 4.1: Kalshi API audit → [`docs/kalshi_audit.md`](docs/kalshi_audit.md): public API, NBA series `KXNBAGAME`,
   1-minute historical bid/ask for all 2025-26 games, prices available 60 minutes before tip-off
-- [ ] Step 4.2: Kalshi client and fee formula from the official fee schedule
+- [x] Step 4.2: Read-only Kalshi client (`src/kalshi_client.py`, cached, retries) and taker-fee formula (`src/kalshi_fees.py`)
+- [x] Step 4.3: All 1,230 games matched; bid/ask 60 minutes before tip-off for 1,227 (`src/kalshi_prices.py`)
+- [ ] Step 4.4: Pre-register the paper-trading strategy, then compare model vs. market on 2025-26
 
 ## Folder Structure
 
@@ -116,6 +118,7 @@ python -m src.availability_features # expected-minutes-missing features from tho
 python -m src.walk_forward          # walk-forward feature-group ablation (development seasons only)
 python -m src.injury_impact         # probability-of-playing and player-impact features
 python -m src.accuracy_experiments  # accuracy experiments vs. the 10-input baseline
+python -m src.kalshi_prices         # match Kalshi events and record prices 60 min before tip (~25 min first run)
 python -m pytest                    # run the data validation and leakage tests
 ```
 
@@ -140,6 +143,7 @@ home-court advantage, scoring, recent form, rest, Elo calibration, and single-fe
   Elo ratings. Data files are not committed; run the scripts to rebuild them.
 - **Injury reports (prototype):** the NBA's official pre-game injury report PDFs
   (`ak-static.cms.nba.com/referee/injury/`), parsed with `pdfplumber`. Not committed.
+- **Kalshi:** public market-data API (`api.elections.kalshi.com/trade-api/v2`), series `KXNBAGAME`; read-only, no account.
 - **Elo method:** settings follow FiveThirtyEight's published NBA Elo (K = 20, home advantage = 100,
   75% season carry-over, margin-of-victory multiplier).
 
