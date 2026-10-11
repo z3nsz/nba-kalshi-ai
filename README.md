@@ -61,7 +61,11 @@ The final model beats tuned Elo on log loss by 0.0154 (95% interval [−0.0255, 
 unseen data. When the model is at least 70% confident (42% of games) it is right 79.0% of the time.
 Full protocol and results: [`docs/final_test_protocol.md`](docs/final_test_protocol.md).
 
-**Next:** Phase 4 — Kalshi API integration
+**Phase 4 — Kalshi Integration** (in progress)
+
+- [x] Step 4.1: Kalshi API audit → [`docs/kalshi_audit.md`](docs/kalshi_audit.md): public API, NBA series `KXNBAGAME`,
+  1-minute historical bid/ask for all 2025-26 games, prices available 60 minutes before tip-off
+- [ ] Step 4.2: Kalshi client and fee formula from the official fee schedule
 
 ## Folder Structure
 
@@ -73,7 +77,7 @@ nba-kalshi-ai/
 ├── src/              # Reusable Python modules (collection, cleaning, features)
 ├── notebooks/        # Analysis notebooks documenting the process and findings
 ├── results/          # small, committed outputs (tuned settings, comparison table, charts)
-├── docs/             # design documents (data availability audit, final test protocol)
+├── docs/             # design documents (data audit, final test protocol, Kalshi audit)
 ├── tests/            # pytest data-validation and leakage tests
 ├── pytest.ini        # pytest configuration
 ├── requirements.txt  # Pinned Python dependencies
