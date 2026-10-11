@@ -47,7 +47,21 @@ compares them with Kalshi prediction-market prices to look for potential mispric
   [`results/final_model_settings.json`](results/final_model_settings.json); `src/final_test.py` runs once and refuses a second run
 - [x] Accuracy experiments (play probability, player impact, Elo re-tuning) → small log-loss gains, accuracy ~67%; see audit
 - [x] Final model locked: **E1+E2** (11 inputs, C = 1.0); walk-forward accuracy 66.5%, log loss 0.6079, AUC 0.721
-- [ ] Step 3.5: Build 2025-26 inputs (injury reports + player logs), then run the one-time test
+- [x] Step 3.5: 2025-26 inputs built and checked; **one-time test run** → see results below
+
+## Final Test Results (2025-26, pre-registered, run once)
+
+| Model | Accuracy | Log loss | Brier | AUC |
+|---|---|---|---|---|
+| **Final model (logistic regression + injury availability, 11 inputs)** | 68.8% | **0.5820** | **0.1995** | **0.752** |
+| Elo (tuned) | 68.9% | 0.5973 | 0.2051 | 0.738 |
+| Always pick home | 55.4% | 0.6874 | 0.2471 | 0.500 |
+
+The final model beats tuned Elo on log loss by 0.0154 (95% interval [−0.0255, −0.0051]); injury features help on
+unseen data. When the model is at least 70% confident (42% of games) it is right 79.0% of the time.
+Full protocol and results: [`docs/final_test_protocol.md`](docs/final_test_protocol.md).
+
+**Next:** Phase 4 — Kalshi API integration
 
 ## Folder Structure
 

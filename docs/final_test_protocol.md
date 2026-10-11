@@ -89,3 +89,39 @@ No outcomes were loaded for these checks (scores and `home_team_win` were droppe
 | Distribution note (inputs only) | 2025-26 teams average more Out minutes (68 vs. 55) and fewer Questionable minutes (6 vs. 11) than development seasons, likely because 15-minute reports let games use a report closer to the 60-minute cutoff |
 
 All checks met the protocol. The model and settings are unchanged from the committed version.
+
+## Results (run once, 2026-10-10, `python -m src.final_test --confirm-one-time-test`)
+
+1,230 games of 2025-26. Raw outputs: `results/final_test_results.json`, `results/final_test_predictions.csv`.
+
+| Model | Accuracy | Log loss | Brier | AUC | Calibration error |
+|---|---|---|---|---|---|
+| **E1+E2 (final model)** | 68.8% | **0.5820** | **0.1995** | **0.752** | 0.040 |
+| Logistic, 10 inputs | 68.8% | 0.5866 | 0.2012 | 0.748 | 0.026 |
+| Logistic, Phase 2 (no injuries) | 69.2% | 0.5963 | 0.2049 | 0.738 | 0.032 |
+| Elo (tuned) | 68.9% | 0.5973 | 0.2051 | 0.738 | 0.047 |
+| Always home | 55.4% | 0.6874 | 0.2471 | 0.500 | 0.032 |
+
+Log loss gaps (final model minus comparison; 95% date-block interval):
+
+| vs. | Gap | Interval |
+|---|---|---|
+| Logistic, 10 inputs | −0.0046 | [−0.0078, −0.0016] |
+| Logistic, Phase 2 | −0.0143 | [−0.0228, −0.0058] |
+| Elo (tuned) | −0.0154 | [−0.0255, −0.0051] |
+| Always home | −0.1054 | [−0.1301, −0.0805] |
+
+Answers to the pre-registered questions:
+1. **Yes**, the final model beats Elo and always-home on log loss (intervals exclude zero).
+2. **Yes**, injury information helps on unseen data (−0.0143 vs. the same model without it).
+3. **Yes**, the E1+E2 refinements beat the 10-input model (−0.0046, interval excludes zero), a stronger result than in development.
+4. Calibration: groups of ~123 games deviate both up and down from the diagonal with no consistent direction, within
+   the ±0.045 noise of a single group; calibration error 0.040 is at that noise level.
+
+Confidence thresholds (final model): ≥60%: 74.5% accuracy on 70% of games; ≥65%: 77.1% on 56%; ≥70%: 79.0% on 42%;
+≥75%: 83.8% on 30%; ≥80%: 88.6% on 19%.
+
+Notes: all-game accuracy does not separate the models (differences of 0.4 points; noise is about ±1.3 points on 1,230
+games). 2025-26 was more predictable than the development seasons for every model, including Elo, so absolute scores
+are higher than in walk-forward validation (final model: 0.6079 log loss and 66.5% accuracy there). No setting was
+changed after seeing these results, and 2025-26 can no longer serve as an untouched test.
