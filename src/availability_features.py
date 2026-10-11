@@ -5,6 +5,12 @@ For each team in each game:
     out_minutes           sum of expected minutes of players listed Out or Doubtful
     questionable_minutes  sum of expected minutes of players listed Questionable
     starters_out          players listed Out/Doubtful who averaged 28+ minutes
+    out_game_score        sum of Out/Doubtful players' average Game Score (impact, not just minutes)
+    questionable_game_score  the same for Questionable players
+    out_plus_minus        sum of Out/Doubtful players' average plus-minus per game
+
+Game Score (John Hollinger's box-score summary, ~20 for a star, ~5 for a bench player):
+    PTS + 0.4 FGM - 0.7 FGA - 0.4 (FTA - FTM) + 0.7 OREB + 0.3 DREB + STL + 0.7 AST + 0.7 BLK - 0.4 PF - TOV
 
 "Expected minutes" = the player's average minutes per game this season, using
 only games on dates BEFORE this game. A player who has not played yet this
@@ -45,7 +51,9 @@ TEAM_ABBREVIATIONS = {
     "Sacramento Kings": "SAC", "San Antonio Spurs": "SAS", "Toronto Raptors": "TOR", "Utah Jazz": "UTA",
     "Washington Wizards": "WAS",
 }
-TEAM_COLUMNS = ["out_minutes", "questionable_minutes", "starters_out", "report_found"]
+VALUE_COLUMNS = ["out_minutes", "questionable_minutes", "starters_out",
+                 "out_game_score", "questionable_game_score", "out_plus_minus"]
+TEAM_COLUMNS = [*VALUE_COLUMNS, "report_found"]
 
 
 def load_player_logs(seasons=DEVELOPMENT_SEASONS) -> pd.DataFrame:
@@ -55,13 +63,26 @@ def load_player_logs(seasons=DEVELOPMENT_SEASONS) -> pd.DataFrame:
     return logs
 
 
+def game_score(logs: pd.DataFrame) -> pd.Series:
+    """Hollinger's Game Score for each player box score."""
+    return (logs["PTS"] + 0.4 * logs["FGM"] - 0.7 * logs["FGA"] - 0.4 * (logs["FTA"] - logs["FTM"])
+            + 0.7 * logs["OREB"] + 0.3 * logs["DREB"] + logs["STL"] + 0.7 * logs["AST"] + 0.7 * logs["BLK"]
+            - 0.4 * logs["PF"] - logs["TOV"])
+
+
+PLAYER_STATS = {"MIN": "avg_minutes", "GAME_SCORE": "avg_game_score", "PLUS_MINUS": "avg_plus_minus"}
+
+
 def expected_minutes_table(logs: pd.DataFrame) -> pd.DataFrame:
-    """Each player's season-to-date average minutes AFTER each game date he played."""
-    per_player_day = (logs.groupby(["season", "PLAYER_ID", "name_key", "GAME_DATE"], as_index=False)["MIN"].sum()
-                      .sort_values("GAME_DATE"))
+    """Each player's season-to-date averages (minutes, Game Score, plus-minus) AFTER each date he played."""
+    logs = logs.assign(GAME_SCORE=game_score(logs))
+    per_player_day = (logs.groupby(["season", "PLAYER_ID", "name_key", "GAME_DATE"], as_index=False)[list(PLAYER_STATS)]
+                      .sum().sort_values("GAME_DATE"))
     grouped = per_player_day.groupby(["season", "PLAYER_ID"])
-    per_player_day["avg_minutes"] = grouped["MIN"].cumsum() / (grouped.cumcount() + 1)
-    return per_player_day[["season", "PLAYER_ID", "name_key", "GAME_DATE", "avg_minutes"]]
+    games_so_far = grouped.cumcount() + 1
+    for stat, average in PLAYER_STATS.items():
+        per_player_day[average] = grouped[stat].cumsum() / games_so_far
+    return per_player_day[["season", "PLAYER_ID", "name_key", "GAME_DATE", *PLAYER_STATS.values()]]
 
 
 PARSED_CACHE_PATH = PROCESSED_DATA_DIR / "injury_report_rows.csv"
@@ -86,13 +107,13 @@ def attach_expected_minutes(listed: pd.DataFrame, minutes: pd.DataFrame) -> pd.D
     """For each listed player, his average minutes from games strictly before the game date."""
     listed = listed.sort_values("game_date")
     minutes = minutes.sort_values("GAME_DATE")
-    return pd.merge_asof(listed, minutes[["season", "name_key", "GAME_DATE", "avg_minutes"]],
+    return pd.merge_asof(listed, minutes[["season", "name_key", "GAME_DATE", *PLAYER_STATS.values()]],
                          left_on="game_date", right_on="GAME_DATE", by=["season", "name_key"],
                          allow_exact_matches=False, direction="backward")
 
 
-def availability_features(games: pd.DataFrame, manifest: pd.DataFrame, logs: pd.DataFrame) -> pd.DataFrame:
-    """One row per game: home_/away_ availability features (NaN where no usable report)."""
+def listed_rows(games: pd.DataFrame, manifest: pd.DataFrame) -> pd.DataFrame:
+    """Every row of each game's chosen pre-game report (players and NOT YET SUBMITTED markers)."""
     games = games[games["season"].isin(DEVELOPMENT_SEASONS)]
     manifest = manifest.dropna(subset=["report_file"])
     reports = parsed_reports(manifest["report_file"].tolist())
@@ -117,16 +138,31 @@ def availability_features(games: pd.DataFrame, manifest: pd.DataFrame, logs: pd.
         print(f"  {len(too_late_games)} games: report too close to (possibly rescheduled) tip-off -> availability unknown")
     listed = listed[~listed["game_id"].isin(too_late_games)]
     assert not (listed["tip_off"].notna() & (listed["report_time"] > listed["tip_off"] - PREGAME_BUFFER)).any()
+    return listed
 
+
+def listed_players(listed: pd.DataFrame, logs: pd.DataFrame) -> pd.DataFrame:
+    """Players in the chosen reports, with season-to-date averages from strictly earlier dates."""
     players = listed[listed["player"].notna()].copy()
     players["name_key"] = players["player"].map(normalize_player_name)
     players = attach_expected_minutes(players, expected_minutes_table(logs))
-    players["avg_minutes"] = players["avg_minutes"].fillna(0)
+    players[list(PLAYER_STATS.values())] = players[list(PLAYER_STATS.values())].fillna(0)
     players["is_out"] = players["status"].isin(UNAVAILABLE)
+    return players
+
+
+def availability_features(games: pd.DataFrame, manifest: pd.DataFrame, logs: pd.DataFrame) -> pd.DataFrame:
+    """One row per game: home_/away_ availability features (NaN where no usable report)."""
+    games = games[games["season"].isin(DEVELOPMENT_SEASONS)]
+    listed = listed_rows(games, manifest)
+    players = listed_players(listed, logs)
     team_totals = players.groupby(["game_id", "team_abbr"]).apply(lambda team: pd.Series({
         "out_minutes": team.loc[team["is_out"], "avg_minutes"].sum(),
         "questionable_minutes": team.loc[team["status"] == "Questionable", "avg_minutes"].sum(),
         "starters_out": int((team["is_out"] & (team["avg_minutes"] >= STARTER_MINUTES)).sum()),
+        "out_game_score": team.loc[team["is_out"], "avg_game_score"].sum(),
+        "questionable_game_score": team.loc[team["status"] == "Questionable", "avg_game_score"].sum(),
+        "out_plus_minus": team.loc[team["is_out"], "avg_plus_minus"].sum(),
     }), include_groups=False).reset_index()
 
     # A team "has a report" if its matchup appeared and it was not marked NOT YET SUBMITTED.
@@ -144,7 +180,7 @@ def availability_features(games: pd.DataFrame, manifest: pd.DataFrame, logs: pd.
                              .merge(not_submitted.assign(flag=True), on=["game_id", "team_abbr"], how="left")["flag"]
                              .notna().to_numpy())  # a real boolean array, so ~ means "not"
         known = in_report.to_numpy() & ~not_yet_submitted
-        for column in ["out_minutes", "questionable_minutes", "starters_out"]:
+        for column in VALUE_COLUMNS:
             # Listed in the report with no players = nobody injured = 0. Unknown report = NaN.
             side_values[column] = side_values[column].fillna(0).where(known)
         side_values["report_found"] = known.astype(int)

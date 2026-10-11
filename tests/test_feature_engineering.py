@@ -15,10 +15,11 @@ from src.feature_engineering import (
     previous_games_mean,
 )
 from src.strength_features import STRENGTH_FEATURES
+from src.travel_features import TRAVEL_FEATURES
 
 ROLLING_NAMES = [name for name, _, _ in ROLLING_FEATURES]
 PRE_GAME_COLUMNS = (
-    [f"{side}_{name}" for side in ["home", "away"] for name in ROLLING_NAMES + STRENGTH_FEATURES]
+    [f"{side}_{name}" for side in ["home", "away"] for name in ROLLING_NAMES + STRENGTH_FEATURES + TRAVEL_FEATURES]
     + ["home_elo", "away_elo", "elo_home_win_prob", "elo_diff"]
 )
 

@@ -39,11 +39,24 @@ def make_model_inputs(features: pd.DataFrame) -> pd.DataFrame:
         inputs[f"opp_elo_last{window}_diff"] = features[f"home_opp_elo_last{window}"] - features[f"away_opp_elo_last{window}"]
     inputs["margin_vs_elo_last10_diff"] = features["home_margin_vs_elo_last10"] - features["away_margin_vs_elo_last10"]
 
+    # Phase 3 travel features (src/travel_features.py). Away minus home: positive = the away
+    # team traveled more / is deeper into a road trip / crossed more time zones.
+    inputs["travel_km_diff"] = features["away_travel_km"] - features["home_travel_km"]
+    inputs["travel_km_last7d_diff"] = features["away_travel_km_last7d"] - features["home_travel_km_last7d"]
+    inputs["tz_change_abs_diff"] = features["away_tz_change_hours"].abs() - features["home_tz_change_hours"].abs()
+    inputs["road_trip_game_diff"] = features["away_road_trip_game"] - features["home_road_trip_game"]
+
     # Phase 3 availability features (src/availability_features.py), present only when merged in.
     # Away minus home: positive = the AWAY team is missing more (good for the home team).
     # Unknown (no usable report) becomes 0 below = "no evidence either team is missing more".
     if "home_out_minutes" in features:
-        for stat in ["out_minutes", "questionable_minutes", "starters_out"]:
+        for stat in ["out_minutes", "questionable_minutes", "starters_out",
+                     "out_game_score", "questionable_game_score", "out_plus_minus"]:
+            if f"home_{stat}" in features:
+                inputs[f"{stat}_diff"] = features[f"away_{stat}"] - features[f"home_{stat}"]
+    # Accuracy experiments (src/injury_impact.py): probability-weighted missing minutes and player impact.
+    for stat in ["exp_missing_minutes", "exp_missing_q_minutes", "exp_missing_value", "exp_stars_missing"]:
+        if f"home_{stat}" in features:
             inputs[f"{stat}_diff"] = features[f"away_{stat}"] - features[f"home_{stat}"]
     return inputs.fillna(0)
 
@@ -65,6 +78,9 @@ FEATURE_GROUPS = {
     "ratings": [f"{stat}_last{window}_diff" for window in [5, 10] for stat in ["off_rating", "def_rating"]],
     "schedule strength": ["opp_elo_last5_diff", "opp_elo_last10_diff", "margin_vs_elo_last10_diff"],
     "availability": ["out_minutes_diff", "questionable_minutes_diff", "starters_out_diff"],
+    "player impact": ["out_game_score_diff", "questionable_game_score_diff"],
+    "plus-minus impact": ["out_plus_minus_diff"],
+    "travel": ["travel_km_diff", "travel_km_last7d_diff", "tz_change_abs_diff", "road_trip_game_diff"],
 }
 
 

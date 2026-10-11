@@ -42,7 +42,12 @@ compares them with Kalshi prediction-market prices to look for potential mispric
 - [x] Step 3.3 (part 1): Walk-forward ablation of ratings + schedule strength → **no improvement; not added** (`python -m src.walk_forward`)
 - [x] Step 3.2c / 3.3: Player availability from official injury reports → **added**: walk-forward log loss
   0.6190 → 0.6097 (−0.0093, 95% CI [−0.0142, −0.0044]), accuracy 65.0% → 66.9%, better in all 3 seasons
-- [ ] Step 3.2b: Travel and fatigue
+- [x] Step 3.2b: Travel and fatigue (distance, time zones, road trips) → **no improvement; not added**
+- [x] Step 3.4: Final model locked and test procedure pre-registered → [`docs/final_test_protocol.md`](docs/final_test_protocol.md),
+  [`results/final_model_settings.json`](results/final_model_settings.json); `src/final_test.py` runs once and refuses a second run
+- [x] Accuracy experiments (play probability, player impact, Elo re-tuning) → small log-loss gains, accuracy ~67%; see audit
+- [x] Final model locked: **E1+E2** (11 inputs, C = 1.0); walk-forward accuracy 66.5%, log loss 0.6079, AUC 0.721
+- [ ] Step 3.5: Build 2025-26 inputs (injury reports + player logs), then run the one-time test
 
 ## Folder Structure
 
@@ -54,7 +59,7 @@ nba-kalshi-ai/
 ├── src/              # Reusable Python modules (collection, cleaning, features)
 ├── notebooks/        # Analysis notebooks documenting the process and findings
 ├── results/          # small, committed outputs (tuned settings, comparison table, charts)
-├── docs/             # design documents (data availability audit)
+├── docs/             # design documents (data availability audit, final test protocol)
 ├── tests/            # pytest data-validation and leakage tests
 ├── pytest.ini        # pytest configuration
 ├── requirements.txt  # Pinned Python dependencies
@@ -91,6 +96,8 @@ python -m src.compare_models        # validation comparison, calibration chart, 
 python -m src.injury_download       # official injury reports for each development-season game (~1 hour, ~200 MB)
 python -m src.availability_features # expected-minutes-missing features from those reports
 python -m src.walk_forward          # walk-forward feature-group ablation (development seasons only)
+python -m src.injury_impact         # probability-of-playing and player-impact features
+python -m src.accuracy_experiments  # accuracy experiments vs. the 10-input baseline
 python -m pytest                    # run the data validation and leakage tests
 ```
 

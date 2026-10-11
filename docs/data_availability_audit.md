@@ -150,3 +150,63 @@ count about a third as much as Out players).
 - Early-season expected minutes are noisy (few games played).
 - For the final 2025-26 evaluation, that season's reports (new 30-minute schedule and `_05_00PM` filenames) and
   player logs are needed. Downloading them needs approval, and the parser must be re-checked on the new format.
+
+## Walk-forward result: travel and fatigue (Step 3.2b)
+
+Features (`src/travel_features.py`): great-circle km from the previous venue, km over the last 7 days,
+absolute time-zone change, and position in the current road trip. Venues handle neutral sites, the 2019-20
+Orlando bubble, and Toronto's 2020-21 home games in Tampa; time zones are looked up per date.
+
+Bugs found and fixed:
+1. Toronto's entire 2020-21 season counted as one 72-game road trip ("venue is not own arena"). Road games are
+   now defined by the game itself: away team or neutral site.
+2. A daylight-saving change between two games was counted as an extra hour of travel (NY → LA showed 4 hours).
+   Both venues are now compared on the same date.
+
+| Logistic regression | Log loss | Change vs. Phase 2 | 95% interval | Calibration error |
+|---|---|---|---|---|
+| + travel | 0.6204 | +0.0014 | [−0.0004, +0.0032] | 0.021 |
+| + availability | 0.6097 | −0.0093 | [−0.0142, −0.0044] | 0.012 |
+| + availability + travel | 0.6109 | −0.0081 | [−0.0132, −0.0030] | 0.020 |
+
+**Decision: do not add travel.** It barely overlaps with back-to-backs or rest (correlations ≤ 0.16) yet adds
+no predictive value, and it worsens calibration. The away team almost always traveled, so `home_court` already
+captures most of it. Back-to-back (already in the model) remains the fatigue signal that matters.
+
+## Walk-forward result: player impact and ensembles (accuracy push)
+
+Missing players weighted by impact instead of minutes: season-to-date average **Game Score** (Hollinger) and
+average **plus-minus**, from earlier dates only. Also tested: averaging logistic regression and XGBoost.
+
+| Model (walk-forward, 3,690 games) | Log loss | Accuracy | AUC | Calibration error | vs. logistic + availability |
+|---|---|---|---|---|---|
+| Logistic + availability (current) | 0.6097 | 66.9% | 0.719 | 0.012 | — |
+| Logistic + availability + Game Score | 0.6086 | 67.2% | 0.721 | 0.025 | −0.0011 [−0.0029, +0.0007] |
+| Logistic + availability + plus-minus | 0.6097 | 67.0% | 0.719 | 0.015 | +0.0001 [−0.0003, +0.0004] |
+| Ensemble (logistic + XGBoost) + availability | 0.6113 | 66.9% | 0.717 | 0.017 | +0.0016 [+0.0001, +0.0031] (worse) |
+
+**Decision: keep logistic + availability.** Game Score improves log loss and accuracy slightly in 2 of 3 seasons,
+but the improvement is within noise (interval includes 0; accuracy noise is about ±0.8 points on 3,690 games) and
+calibration error doubles. Plus-minus adds nothing; the ensemble is worse. Accuracy is close to the level a
+perfectly calibrated model with these probabilities would reach (66.2% expected vs. 66.9% observed).
+
+## Accuracy experiments toward 70% (`python -m src.accuracy_experiments`)
+
+Walk-forward, 3,690 games (2022-23, 2023-24, 2024-25), logistic regression C = 1.0, test season not used.
+Baseline = locked 10-input model. Calibration slope (1.0 = perfect) was ~1.00 for every variant.
+
+| Experiment | Accuracy | Log loss | Brier | AUC | vs. baseline (95% date-block) | Seasons better |
+|---|---|---|---|---|---|---|
+| Baseline (10 inputs) | 66.9% | 0.6097 | 0.2111 | 0.719 | — | — |
+| E1a: Questionable minutes × P(miss) | 67.1% | 0.6091 | 0.2108 | 0.719 | −0.0006 [−0.0011, −0.0001] | 3/3 |
+| E1b: all listed minutes × P(miss) | 66.9% | 0.6089 | 0.2108 | 0.720 | −0.0007 [−0.0016, +0.0002] | 3/3 |
+| E2a: + value above average | 66.7% | 0.6087 | 0.2106 | 0.720 | −0.0010 [−0.0026, +0.0005] | 3/3 |
+| E2b: + value + stars missing | 66.7% | 0.6087 | 0.2107 | 0.720 | −0.0010 [−0.0025, +0.0006] | 3/3 |
+| **E1+E2: P(miss) minutes + value + stars** | 66.5% | **0.6079** | **0.2103** | **0.721** | **−0.0018 [−0.0037, −0.0000]** | 3/3 |
+| E3: Elo re-tuned per fold | 67.0% | 0.6097 | 0.2110 | 0.718 | +0.0000 [−0.0014, +0.0014] | 1/3 |
+
+Findings: Questionable players play 50.4% of the time, Doubtful 2.1%, Probable 90.3%; individual histories vary a lot
+(e.g. 97% vs. 0% for two frequently-listed players). Player impact (Game Score per minute above league average, shrunk
+toward last season) ranks stars correctly but misses defense. Elo re-tuning chose carry-over 0.5 in every fold and
+added nothing. All-game accuracy did not move beyond noise (±0.8 points); 70% was not reached.
+Caveat: seven variants were compared, so the borderline E1+E2 interval should be read with that in mind.

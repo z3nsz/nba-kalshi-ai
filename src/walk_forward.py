@@ -49,6 +49,10 @@ FEATURE_SET_CANDIDATES = {
     "+ schedule strength": PHASE2_INPUTS + FEATURE_GROUPS["schedule strength"],
     "+ ratings + schedule strength": PHASE2_INPUTS + FEATURE_GROUPS["ratings"] + FEATURE_GROUPS["schedule strength"],
     "+ availability": PHASE2_INPUTS + FEATURE_GROUPS["availability"],
+    "+ travel": PHASE2_INPUTS + FEATURE_GROUPS["travel"],
+    "+ availability + travel": PHASE2_INPUTS + FEATURE_GROUPS["availability"] + FEATURE_GROUPS["travel"],
+    "+ availability + game score": PHASE2_INPUTS + FEATURE_GROUPS["availability"] + FEATURE_GROUPS["player impact"],
+    "+ availability + plus-minus": PHASE2_INPUTS + FEATURE_GROUPS["availability"] + FEATURE_GROUPS["plus-minus impact"],
 }
 BASELINE = ("logistic", "phase 2 (7 inputs)")
 
@@ -88,7 +92,7 @@ def model_trainers(tuned: dict) -> dict:
 def walk_forward_predictions(features: pd.DataFrame, runs: list[tuple[str, str]], tuned: dict) -> pd.DataFrame:
     """Out-of-sample P(home wins) for every evaluated game, one column per (model, feature set)."""
     features = development_only(features)
-    needs_availability = any(set_name == "+ availability" for _, set_name in runs)
+    needs_availability = any("availability" in set_name for _, set_name in runs)
     if needs_availability and "home_out_minutes" not in features:
         raise ValueError("'+ availability' needs injury features: pass with_availability(load_features_table())")
     trainers = model_trainers(tuned)
@@ -123,19 +127,20 @@ def date_block_bootstrap(predictions: pd.DataFrame, column: str, reference: str,
 
 def summarize(predictions: pd.DataFrame) -> pd.DataFrame:
     reference = " | ".join(BASELINE)
+    has_reference = reference in predictions  # comparisons need the baseline among the runs
     rows = []
     for column in [c for c in predictions.columns if " | " in c]:
         model_name, set_name = column.split(" | ")
         pooled = score_predictions(predictions[TARGET], predictions[column])
         per_fold = predictions.groupby("season").apply(
             lambda fold: score_predictions(fold[TARGET], fold[column])["log_loss"])
-        reference_per_fold = predictions.groupby("season").apply(
-            lambda fold: score_predictions(fold[TARGET], fold[reference])["log_loss"])
+        reference_per_fold = (predictions.groupby("season").apply(
+            lambda fold: score_predictions(fold[TARGET], fold[reference])["log_loss"]) if has_reference else per_fold)
         row = {"model": model_name, "features": set_name, **pooled,
                "calibration_error": expected_calibration_error(predictions[TARGET], predictions[column]),
                **{f"log_loss {season}": value for season, value in per_fold.items()},
                "folds_better_than_baseline": int((per_fold < reference_per_fold - 1e-12).sum())}
-        if column != reference:
+        if has_reference and column != reference:
             gap, low, high = date_block_bootstrap(predictions, column, reference)
             row.update({"vs_baseline": gap, "ci_low": low, "ci_high": high})
         rows.append(row)
@@ -146,11 +151,12 @@ if __name__ == "__main__":
     tuned = json.loads(TUNED_SETTINGS_PATH.read_text())
     features = with_availability(load_features_table())
     candidates = [name for name in FEATURE_SET_CANDIDATES
-                  if name != "+ availability" or "home_out_minutes" in features]
+                  if "availability" not in name or "home_out_minutes" in features]
     runs = ([("logistic", set_name) for set_name in candidates]
             + [(model, set_name) for model in ["random forest", "xgboost"]
                for set_name in ["phase 2 (7 inputs)", "+ ratings + schedule strength"]
-               + (["+ availability"] if "+ availability" in candidates else [])])
+               + [name for name in ["+ availability", "+ availability + travel", "+ availability + game score"]
+                  if name in candidates]])
     predictions = walk_forward_predictions(features, runs, tuned)
     print("Folds:", ", ".join(f"{train[0]}..{train[-1]} -> {season}" for train, season in FOLDS))
     print(f"Evaluated games: {len(predictions)} (seasons {sorted(predictions['season'].unique())}; test season not used)\n")

@@ -13,6 +13,10 @@ def player_logs() -> pd.DataFrame:
         "name_key": ["starplayer"] * 3,
         "GAME_DATE": pd.to_datetime(["2024-11-01", "2024-11-03", "2024-11-05"]),
         "MIN": [30, 40, 20],
+        # Only points are non-zero, so Game Score equals points: 10, 30, 50.
+        "PTS": [10, 30, 50], "FGM": [0] * 3, "FGA": [0] * 3, "FTA": [0] * 3, "FTM": [0] * 3, "OREB": [0] * 3,
+        "DREB": [0] * 3, "STL": [0] * 3, "AST": [0] * 3, "BLK": [0] * 3, "PF": [0] * 3, "TOV": [0] * 3,
+        "PLUS_MINUS": [5, -5, 15],
     })
 
 
@@ -25,6 +29,9 @@ def test_expected_minutes_use_only_earlier_dates():
     assert result["2024-11-03"] == 30, "only the Nov 1 game counts, not Nov 3's own 40 minutes"
     assert result["2024-11-04"] == 35
     assert result["2024-11-05"] == 35, "the Nov 5 game itself (20 minutes) must not count"
+    impact = attach_expected_minutes(listed, minutes).set_index("game_date")
+    assert impact.loc["2024-11-05", "avg_game_score"] == 20, "average of 10 and 30, not the Nov 5 game's 50"
+    assert impact.loc["2024-11-05", "avg_plus_minus"] == 0
 
 
 def test_expected_minutes_reset_each_season():

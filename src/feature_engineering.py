@@ -14,6 +14,8 @@ Features:
     - Elo: each team's rating before tip-off and the implied home win probability
     - strength (src/strength_features.py): offensive / defensive / net rating per
       100 possessions, average opponent Elo, and margin versus Elo expectation
+    - travel (src/travel_features.py): distance, 7-day distance, time-zone change,
+      and position in the current road trip
 
 Elo is computed over the warm-up seasons too, so ratings are realistic by the
 start of 2020-21; only the modeling seasons are written to the features file.
@@ -27,6 +29,7 @@ import pandas as pd
 from src.clean_data import PROCESSED_DATA_DIR, load_games_table
 from src.collect_data import SEASONS
 from src.strength_features import STRENGTH_FEATURES, strength_features
+from src.travel_features import TRAVEL_FEATURES, travel_features
 
 FEATURES_PATH = PROCESSED_DATA_DIR / "nba_features.csv"
 
@@ -135,8 +138,8 @@ def elo_win_probability(rating_gap: float) -> float:
     return 1 / (1 + 10 ** (-rating_gap / 400))
 
 
-def compute_elo(games: pd.DataFrame, k: float = ELO_K,
-                home_advantage: float = ELO_HOME_ADVANTAGE) -> pd.DataFrame:
+def compute_elo(games: pd.DataFrame, k: float = ELO_K, home_advantage: float = ELO_HOME_ADVANTAGE,
+                carryover: float = ELO_SEASON_CARRYOVER, margin_of_victory: bool = True) -> pd.DataFrame:
     """Walk through games in date order and record each team's Elo BEFORE each game.
 
     Ratings are only updated after a game's pre-game values are stored, so a
@@ -154,7 +157,7 @@ def compute_elo(games: pd.DataFrame, k: float = ELO_K,
         if game.season != current_season:
             # New season: pull every rating part of the way back toward average,
             # because rosters change over the summer.
-            ratings = {team: ELO_SEASON_MEAN + ELO_SEASON_CARRYOVER * (rating - ELO_SEASON_MEAN)
+            ratings = {team: ELO_SEASON_MEAN + carryover * (rating - ELO_SEASON_MEAN)
                        for team, rating in ratings.items()}
             current_season = game.season
 
@@ -168,7 +171,7 @@ def compute_elo(games: pd.DataFrame, k: float = ELO_K,
         # the favorite wins big (FiveThirtyEight's margin-of-victory multiplier).
         margin = abs(game.home_score - game.away_score)
         winner_gap = (home_elo + home_bonus - away_elo) * (1 if game.home_team_win else -1)
-        margin_multiplier = (margin + 3) ** 0.8 / (7.5 + 0.006 * winner_gap)
+        margin_multiplier = (margin + 3) ** 0.8 / (7.5 + 0.006 * winner_gap) if margin_of_victory else 1.0
         change = k * margin_multiplier * (game.home_team_win - home_win_prob)
         ratings[game.home_team] = home_elo + change
         ratings[game.away_team] = away_elo - change
@@ -182,8 +185,9 @@ def build_features_table(games: pd.DataFrame) -> pd.DataFrame:
     team_games = add_rest_features(add_rolling_features(to_team_games(games)))
     team_games = team_games.merge(strength_features(games, elo, ELO_HOME_ADVANTAGE),
                                   on=["game_id", "team"], how="left", validate="one_to_one")
+    team_games = team_games.merge(travel_features(games), on=["game_id", "team"], how="left", validate="one_to_one")
     feature_columns = [name for name, _, _ in ROLLING_FEATURES] + [
-        "games_played_before", "days_since_last_game", "is_back_to_back", *STRENGTH_FEATURES,
+        "games_played_before", "days_since_last_game", "is_back_to_back", *STRENGTH_FEATURES, *TRAVEL_FEATURES,
     ]
 
     features = games[GAME_COLUMNS].copy()
