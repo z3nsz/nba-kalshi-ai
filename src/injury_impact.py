@@ -96,9 +96,11 @@ def player_value_table(logs: pd.DataFrame) -> pd.DataFrame:
     return days[["season", "name_key", "GAME_DATE", "rate_above_league", "league_rate"]]
 
 
-def injury_impact_features(games: pd.DataFrame, manifest: pd.DataFrame, logs: pd.DataFrame) -> pd.DataFrame:
-    games = games[games["season"].isin(DEVELOPMENT_SEASONS)]
-    players = listed_players(listed_rows(games, manifest), logs)
+def injury_impact_features(games: pd.DataFrame, manifest: pd.DataFrame, logs: pd.DataFrame,
+                           seasons=DEVELOPMENT_SEASONS, availability: pd.DataFrame | None = None):
+    """Features for games in `seasons`. Histories (P(play), prior-season value) use every earlier date given."""
+    games = games[games["season"].isin(seasons)]
+    players = listed_players(listed_rows(games, manifest, seasons), logs)
     players = players[players["status"].isin(STATUSES)].copy()
     players["played"] = played_flags(players, logs)
     players["p_play"] = play_probabilities(players)
@@ -116,7 +118,7 @@ def injury_impact_features(games: pd.DataFrame, manifest: pd.DataFrame, logs: pd
     team = players.groupby(["game_id", "team_abbr"])[IMPACT_COLUMNS].sum().reset_index()
 
     # Same "known" rule as the baseline features: unknown report -> NaN.
-    baseline = pd.read_csv(AVAILABILITY_PATH, dtype={"game_id": str})
+    baseline = availability if availability is not None else pd.read_csv(AVAILABILITY_PATH, dtype={"game_id": str})
     result = games[["game_id"]].copy()
     for side in ["home", "away"]:
         side_values = (games[["game_id", f"{side}_team"]].rename(columns={f"{side}_team": "team_abbr"})
@@ -129,8 +131,42 @@ def injury_impact_features(games: pd.DataFrame, manifest: pd.DataFrame, logs: pd
     return result, players
 
 
+TEST_IMPACT_PATH = PROCESSED_DATA_DIR / "injury_impact_features_test.csv"
+
 if __name__ == "__main__":
-    manifest = pd.read_csv(MANIFEST_PATH, dtype={"game_id": str}, parse_dates=["game_date", "tip_off"])
+    import argparse
+    from src.availability_features import TEST_AVAILABILITY_PATH
+    from src.injury_download import TEST_MANIFEST_PATH
+    from src.walk_forward import TEST_SEASONS
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--test-season", action="store_true", help="build 2025-26 features (protocol committed)")
+    args = parser.parse_args()
+    read = lambda path: pd.read_csv(path, dtype={"game_id": str}, parse_dates=["game_date", "tip_off"])
+    if args.test_season:
+        # Process development + test seasons together so histories reach back across seasons;
+        # keep only test-season rows. Development rows are re-checked against the saved file.
+        seasons = DEVELOPMENT_SEASONS + TEST_SEASONS
+        manifest = pd.concat([read(MANIFEST_PATH), read(TEST_MANIFEST_PATH)], ignore_index=True)
+        availability = pd.concat([pd.read_csv(AVAILABILITY_PATH, dtype={"game_id": str}),
+                                  pd.read_csv(TEST_AVAILABILITY_PATH, dtype={"game_id": str})], ignore_index=True)
+        table, players = injury_impact_features(load_games_table(), manifest, load_player_logs(seasons),
+                                                seasons, availability)
+        saved_dev = pd.read_csv(IMPACT_PATH, dtype={"game_id": str})
+        rebuilt_dev = table[table["game_id"].isin(saved_dev["game_id"])].sort_values("game_id").reset_index(drop=True)
+        saved_dev = saved_dev.sort_values("game_id").reset_index(drop=True)[rebuilt_dev.columns]
+        values = [c for c in rebuilt_dev.columns if c != "game_id"]
+        # Floating-point sums in a different order differ around 1e-14; anything above 1e-9 would be real.
+        same = (rebuilt_dev["game_id"].equals(saved_dev["game_id"])
+                and (rebuilt_dev[values].isna() == saved_dev[values].isna()).all().all()
+                and np.allclose(rebuilt_dev[values].fillna(0), saved_dev[values].fillna(0), rtol=0, atol=1e-9))
+        print(f"Development-season features unchanged after adding 2025-26 data (within 1e-9): {same}")
+        if not same:
+            raise SystemExit("Leakage check failed: adding later data changed earlier features.")
+        test_games = load_games_table().query("season in @TEST_SEASONS")["game_id"]
+        table[table["game_id"].isin(test_games)].to_csv(TEST_IMPACT_PATH, index=False)
+        print(f"Saved {table['game_id'].isin(test_games).sum()} test-season games -> {TEST_IMPACT_PATH.name}")
+        raise SystemExit
+    manifest = read(MANIFEST_PATH)
     table, players = injury_impact_features(load_games_table(), manifest, load_player_logs())
     table.to_csv(IMPACT_PATH, index=False)
     print(f"Saved {len(table)} games -> data/processed/{IMPACT_PATH.name}\n")

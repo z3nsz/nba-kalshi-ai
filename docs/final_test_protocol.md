@@ -72,3 +72,20 @@ Any later change gets a new protocol and cannot reuse 2025-26 as an untouched te
 - Prediction time is 60 minutes before tip-off; market prices compared later must be captured at the same time.
 - 2025-26 reports use a newer format; parsing problems there would affect only the availability inputs.
 - Expected minutes are noisy early in the season.
+
+## Pre-test structural checks (run 2026-10-10, after the protocol commit `b373f80`, before any scoring)
+
+No outcomes were loaded for these checks (scores and `home_team_win` were dropped first).
+
+| Check | Result |
+|---|---|
+| 2025-26 injury reports downloaded | 75.8 MB this run (cap 100 MB); 738 distinct reports used by games; filename format switched from hourly to 15-minute on 2025-12-22 (both handled); 15-minute reports are stamped at their label time |
+| Rows whose team belongs to its matchup | 100.00% of 102,751 parsed rows |
+| Valid statuses / parsed tip-off times | 100% / 100% |
+| Games found in their chosen report | 99.1% |
+| Team-games with a usable report | home 98.9%, away 99.1% (minimum 95%: met) |
+| Listed names matched to a 2025-26 player | 94.1% (development: 94.9%) |
+| Leakage self-check | Development-season features rebuilt together with 2025-26 data are unchanged (max difference 6e-14, floating-point rounding) |
+| Distribution note (inputs only) | 2025-26 teams average more Out minutes (68 vs. 55) and fewer Questionable minutes (6 vs. 11) than development seasons, likely because 15-minute reports let games use a report closer to the 60-minute cutoff |
+
+All checks met the protocol. The model and settings are unchanged from the committed version.

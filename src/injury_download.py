@@ -35,17 +35,28 @@ PREGAME_BUFFER = pd.Timedelta(minutes=60)
 LABEL_TO_PUBLISH_OFFSET = pd.Timedelta(minutes=30)
 LABELS_2020_21 = ["01PM", "05PM", "08PM"]
 LABELS_HOURLY = ["10AM", "11AM", "12PM", "01PM", "02PM", "03PM", "04PM", "05PM", "06PM", "07PM", "08PM", "09PM", "10PM"]
+# From 2025-12-22 reports come every 15 minutes, named like "05_15PM", stamped at exactly that time.
+QUARTER_HOUR_FORMAT_START = pd.Timestamp("2025-12-22")
+LABELS_QUARTER_HOUR = [f"{(h - 1) % 12 + 1:02d}_{m:02d}{'AM' if h < 12 else 'PM'}"
+                       for h in range(9, 23) for m in (0, 15, 30, 45)]
 MANIFEST_PATH = RAW_DATA_DIR / "injury_report_manifest.csv"
+TEST_MANIFEST_PATH = RAW_DATA_DIR / "injury_report_manifest_test.csv"
+MAX_DOWNLOAD_BYTES = 100_000_000  # hard stop for one run; ask before going further
+_downloaded_bytes = 0
 PAUSE_SECONDS = 0.2
 _failed_downloads: set[str] = set()
 
 
-def labels_for(season: str) -> list[str]:
-    return LABELS_2020_21 if season == "2020-21" else LABELS_HOURLY
+def labels_for(season: str, date: pd.Timestamp) -> list[str]:
+    if season == "2020-21":
+        return LABELS_2020_21
+    return LABELS_QUARTER_HOUR if date >= QUARTER_HOUR_FORMAT_START else LABELS_HOURLY
 
 
 def label_time(date: pd.Timestamp, label: str) -> pd.Timestamp:
-    """Expected publish time of a report label on a date, e.g. '05PM' -> 5:30 PM."""
+    """Expected publish time: '05PM' (hourly era) -> 5:30 PM; '05_15PM' (15-minute era) -> 5:15 PM."""
+    if "_" in label:
+        return pd.to_datetime(f"{date:%Y-%m-%d} {label}", format="%Y-%m-%d %I_%M%p")
     return pd.to_datetime(f"{date:%Y-%m-%d} {label}", format="%Y-%m-%d %I%p") + LABEL_TO_PUBLISH_OFFSET
 
 
@@ -55,22 +66,27 @@ def report_path(date: pd.Timestamp, label: str):
 
 def download(date: pd.Timestamp, label: str, session: requests.Session) -> bool:
     """Download one report if needed. Returns True if the file is now on disk."""
+    global _downloaded_bytes
     path = report_path(date, label)
     if path.exists():
         return True
+    if _downloaded_bytes > MAX_DOWNLOAD_BYTES:
+        raise SystemExit(f"Stopped: this run downloaded {_downloaded_bytes / 1e6:.0f} MB, over the "
+                         f"{MAX_DOWNLOAD_BYTES / 1e6:.0f} MB limit. Ask before continuing (re-running resumes).")
     if path.name in _failed_downloads:
         return False
     for attempt in range(3):
         try:
             response = session.get(BASE_URL.format(date=f"{date:%Y-%m-%d}", label=label), timeout=30)
             time.sleep(PAUSE_SECONDS)
-            if response.status_code == 404:
+            if response.status_code in (403, 404):  # the server answers 403 for files that do not exist
                 _failed_downloads.add(path.name)
                 return False
             response.raise_for_status()
             if not response.content.startswith(b"%PDF"):
                 raise ValueError("response is not a PDF")
             path.write_bytes(response.content)
+            _downloaded_bytes += len(response.content)
             return True
         except (requests.RequestException, ValueError):
             time.sleep(2 ** (attempt + 1))
@@ -94,7 +110,7 @@ def plan_and_download(games: pd.DataFrame) -> pd.DataFrame:
     for day_number, day in enumerate(game_days, start=1):
         day = pd.Timestamp(day)
         season = games.loc[games["game_date"] == day, "season"].iloc[0]
-        labels = labels_for(season)
+        labels = labels_for(season, day)
 
         earliest = first_available(day, labels, session)
         tips = {}
@@ -115,7 +131,7 @@ def plan_and_download(games: pd.DataFrame) -> pd.DataFrame:
                         break
             if chosen_label is None:  # fall back to the previous evening's last report
                 previous = day - pd.Timedelta(days=1)
-                label = first_available(previous, labels_for(season), session, reverse=True)
+                label = first_available(previous, labels_for(season, previous), session, reverse=True)
                 if label:
                     chosen_date, chosen_label = previous, label
             rows.append({"game_id": game.game_id, "game_date": day, "matchup": matchup, "tip_off": tip_off,
@@ -126,11 +142,17 @@ def plan_and_download(games: pd.DataFrame) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Download the injury reports each game needs.")
+    parser.add_argument("--test-season", action="store_true",
+                        help="download for the 2025-26 test season (only after the protocol is committed)")
+    args = parser.parse_args()
     games = load_games_table()
-    games = games[games["season"].isin(DEVELOPMENT_SEASONS)]
-    assert not games["season"].isin(TEST_SEASONS).any()
+    seasons = TEST_SEASONS if args.test_season else DEVELOPMENT_SEASONS
+    games = games[games["season"].isin(seasons)]
     manifest = plan_and_download(games)
-    manifest.to_csv(MANIFEST_PATH, index=False)
+    manifest.to_csv(TEST_MANIFEST_PATH if args.test_season else MANIFEST_PATH, index=False)
+    print(f"Downloaded this run: {_downloaded_bytes / 1e6:.1f} MB")
     files = list(INJURY_REPORT_DIR.glob("*.pdf"))
     print(f"\nGames: {len(manifest)} | with a report: {manifest['report_file'].notna().sum()} "
           f"| with a tip-off time: {manifest['tip_off'].notna().sum()}")

@@ -112,9 +112,9 @@ def attach_expected_minutes(listed: pd.DataFrame, minutes: pd.DataFrame) -> pd.D
                          allow_exact_matches=False, direction="backward")
 
 
-def listed_rows(games: pd.DataFrame, manifest: pd.DataFrame) -> pd.DataFrame:
+def listed_rows(games: pd.DataFrame, manifest: pd.DataFrame, seasons=DEVELOPMENT_SEASONS) -> pd.DataFrame:
     """Every row of each game's chosen pre-game report (players and NOT YET SUBMITTED markers)."""
-    games = games[games["season"].isin(DEVELOPMENT_SEASONS)]
+    games = games[games["season"].isin(seasons)]
     manifest = manifest.dropna(subset=["report_file"])
     reports = parsed_reports(manifest["report_file"].tolist())
     reports["team_abbr"] = reports["team"].map(TEAM_ABBREVIATIONS)
@@ -151,10 +151,11 @@ def listed_players(listed: pd.DataFrame, logs: pd.DataFrame) -> pd.DataFrame:
     return players
 
 
-def availability_features(games: pd.DataFrame, manifest: pd.DataFrame, logs: pd.DataFrame) -> pd.DataFrame:
+def availability_features(games: pd.DataFrame, manifest: pd.DataFrame, logs: pd.DataFrame,
+                          seasons=DEVELOPMENT_SEASONS) -> pd.DataFrame:
     """One row per game: home_/away_ availability features (NaN where no usable report)."""
-    games = games[games["season"].isin(DEVELOPMENT_SEASONS)]
-    listed = listed_rows(games, manifest)
+    games = games[games["season"].isin(seasons)]
+    listed = listed_rows(games, manifest, seasons)
     players = listed_players(listed, logs)
     team_totals = players.groupby(["game_id", "team_abbr"]).apply(lambda team: pd.Series({
         "out_minutes": team.loc[team["is_out"], "avg_minutes"].sum(),
@@ -189,9 +190,20 @@ def availability_features(games: pd.DataFrame, manifest: pd.DataFrame, logs: pd.
     return result
 
 
+TEST_AVAILABILITY_PATH = PROCESSED_DATA_DIR / "availability_features_test.csv"
+
 if __name__ == "__main__":
-    manifest = pd.read_csv(MANIFEST_PATH, dtype={"game_id": str}, parse_dates=["game_date", "tip_off"])
-    table = availability_features(load_games_table(), manifest, load_player_logs())
+    import argparse
+    from src.injury_download import TEST_MANIFEST_PATH
+    from src.walk_forward import TEST_SEASONS
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--test-season", action="store_true", help="build 2025-26 features (protocol committed)")
+    args = parser.parse_args()
+    seasons = TEST_SEASONS if args.test_season else DEVELOPMENT_SEASONS
+    manifest = pd.read_csv(TEST_MANIFEST_PATH if args.test_season else MANIFEST_PATH,
+                           dtype={"game_id": str}, parse_dates=["game_date", "tip_off"])
+    table = availability_features(load_games_table(), manifest, load_player_logs(seasons), seasons)
+    AVAILABILITY_PATH = TEST_AVAILABILITY_PATH if args.test_season else AVAILABILITY_PATH
     table.to_csv(AVAILABILITY_PATH, index=False)
     print(f"Saved {len(table)} games -> data/processed/{AVAILABILITY_PATH.name}")
     print("report found (home, away):", table["home_report_found"].mean().round(3), table["away_report_found"].mean().round(3))
